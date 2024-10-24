@@ -13,7 +13,10 @@ def parse_equation(equation):
 
 def find_variables(equation):
     variables = set(re.findall(r'[a-zA-Z]', equation))
-    return symbols(' '.join(variables))
+    res = symbols(' '.join(variables))
+    if isinstance(res, list) or isinstance(res, tuple):
+        return res
+    return [res]
 
 
 def process_input():
@@ -63,31 +66,18 @@ def process_which(vars):
 
 def generation_solutions(equals, _find_vars, count, _all_unknown_vars):
     results = []
-    random_values_list = []
 
     for i in range(count):
-        # Копируем начальные уравнения
         eq_copy = equals.copy()
-
-        # Для каждой неизвестной переменной генерируем случайное значение и добавляем уравнение
-        random_values = {}
         for var in _all_unknown_vars:
             random_value = round(random.uniform(1, 100), 2)
-            random_values[var] = random_value  # Запоминаем случайные значения
-            eq_copy.append(Eq(var, random_value))  # Добавляем уравнение вида var = random_value
+            eq_copy.append(Eq(var, random_value))
 
-        # Подставляем случайные значения в исходные уравнения
-        eq_with_values = [eq.subs(random_values) for eq in eq_copy]
-
-        # Решаем уравнение с текущим набором данных
-        solutions = solve(eq_with_values, _find_vars)
+        solutions = solve(eq_copy, _find_vars)
         results.append(solutions)
-        random_values_list.append(random_values)
-
-    return results, random_values_list
+    return results
 
 
-# Основной код программы
 n = int(input("Введите количество уравнений: "))
 eq = []
 eq_input = ''
@@ -100,44 +90,41 @@ for i in range(n):
 variables = find_variables(eq_input)
 known_values = get_known_variables(variables)
 
-# Добавляем уравнения для известных переменных (если они введены)
 for key in known_values.keys():
     eq.append(Eq(key, known_values[key]))
 
-# Определяем неизвестные переменные
 all_unknown_vars = [var for var in variables if var not in known_values]
 find_vars = process_which(all_unknown_vars)
 
-# Исключаем переменные, которые нужно найти, из списка тех, для которых нужно генерировать случайные значения
 all_unknown_vars = [var for var in all_unknown_vars if var not in find_vars]
 
-# Указываем количество заданий
 count = int(input("Введите количество заданий: "))
 
-# Генерируем решения и случайные значения
-solutions, random_values_list = generation_solutions(eq, find_vars, count, all_unknown_vars)
+solutions = generation_solutions(eq, variables, count, all_unknown_vars)
 
-# Подготавливаем данные для вывода в таблице
-header = [str(var) for var in (all_unknown_vars + find_vars)]  # Заголовок таблицы
+header = [str(var) for var in variables]
 
 table = []
-for i in range(count):
-    random_values = random_values_list[i]
-    solution = solutions[i]
-
-    # Обрабатываем как случай, если решение - это словарь, так и если это список
+for solution in solutions:
     row_values = []
-    if isinstance(solution, dict):
-        # Если решение в виде словаря
-        row_values = [random_values.get(var, solution.get(var, '-')) for var in (all_unknown_vars + find_vars)]
-    elif isinstance(solution, list):
-        # Если решение в виде списка
-        row_values = [random_values.get(var, solution[i] if i < len(solution) else '-') for i, var in enumerate(all_unknown_vars + find_vars)]
-    else:
-        # Если решение - это единичное значение
-        row_values = [random_values.get(var, solution) for var in (all_unknown_vars + find_vars)]
+    for var in variables:
+        if var in known_values:
+            row_values.append(known_values[var])
+        elif isinstance(solution, dict) and var in solution:
+            value = solution[var]
+            if isinstance(value, (list, tuple)):
+                row_values.append(', '.join(map(str, value)))
+            else:
+                row_values.append(value)
+        elif isinstance(solution, list):
+            ind = variables.index(var)
+            elem = []
+            for j in solution:
+                elem.append(j[ind])
+            row_values.append(elem)
+        else:
+            row_values.append('-')
 
     table.append(row_values)
 
-# Выводим таблицу с помощью tabulate
 print(tabulate(table, headers=header, tablefmt="grid", numalign="center", floatfmt=".4f"))
