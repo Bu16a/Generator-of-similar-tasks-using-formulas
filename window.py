@@ -1,38 +1,8 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog
-import random
-import re
-from sympy import symbols, Eq, solve, sympify
 from tabulate import tabulate
-
-
-class EquationSolver:
-    @staticmethod
-    def parse_equation(equation):
-        equation = re.sub(r'\^', '**', equation)
-        equation = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', equation)
-        equation = re.sub(r'([a-zA-Z])([a-zA-Z])', r'\1*\2', equation)
-        return equation
-
-    @staticmethod
-    def find_variables(equation):
-        variables = set(re.findall(r'[a-zA-Z]', equation))
-        res = symbols(' '.join(variables))
-        return res if isinstance(res, list) or isinstance(res, tuple) else [res]
-
-    @staticmethod
-    def generation_solutions(equations, find_vars, count, all_unknown_vars, ranges):
-        results = []
-        for i in range(count):
-            eq_copy = equations.copy()
-            for var in all_unknown_vars:
-                # Получаем диапазон для текущей переменной
-                var_range = ranges.get(var, (1, 100))  # По умолчанию диапазон от 1 до 100
-                random_value = round(random.uniform(*var_range), 2)
-                eq_copy.append(Eq(var, random_value))
-            solutions = solve(eq_copy, find_vars)
-            results.append(solutions)
-        return results
+from equation_solver import EquationSolver
+from sympy import Eq, sympify
 
 
 class EquationInputWindow:
@@ -75,6 +45,99 @@ class EquationInputWindow:
         variables = EquationSolver.find_variables("\n".join(eq_input))
         self.master.destroy()
         VariableInputWindow(equations, variables)
+
+
+class TaskWindow:
+    def __init__(self, all_unknown_vars, solutions, _uncnowns, _variables):
+        self.all_unknown_vars = all_unknown_vars
+        self.variables = _variables
+        self.solutions = solutions
+        self.uncnowns = _uncnowns
+        self.master = tk.Tk()
+        self.master.title("Генерация заданий")
+
+        var_label = tk.Label(self.master,
+                             text="Доступные переменные: " + ", ".join(str(var) for var in self.all_unknown_vars)
+                                  + '\nОтветы: ' + ", ".join(str(var) for var in self.uncnowns))
+        var_label.pack()
+
+        tk.Label(self.master, text="Введите текст задачи с переменными в формате {переменная}:").pack()
+        self.task_input = tk.Text(self.master, height=5, width=50)
+        self.task_input.pack(pady=10)
+
+        generate_button = tk.Button(self.master, text="Генерация заданий", command=self.generate_tasks)
+        generate_button.pack()
+
+        self.output_frame = tk.Frame(self.master)
+        self.output_frame.pack(pady=10)
+
+        self.output_text = tk.Text(self.output_frame, height=10, width=50)
+        self.output_text.pack(side=tk.LEFT)
+
+        save_button = tk.Button(self.master, text="Сохранить задания", command=self.save_tasks)
+        save_button.pack(pady=5)
+
+        scroll_bar = tk.Scrollbar(self.output_frame)
+        scroll_bar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.output_text.config(yscrollcommand=scroll_bar.set)
+        scroll_bar.config(command=self.output_text.yview)
+
+    def generate_tasks(self):
+        # Получаем шаблон задачи
+        task_template = self.task_input.get("1.0", tk.END).strip()
+        if not task_template:
+            messagebox.showerror("Ошибка", "Введите текст задачи.")
+            return
+
+        tasks = []
+
+        # Итерируем по всем решениям
+        for solution in self.solutions:
+            task = task_template
+            for var in self.all_unknown_vars:
+                # Если решение - словарь
+                if isinstance(solution, dict):
+                    value = solution.get(var, None)
+                # Если решение - список
+                else:
+                    ind = self.variables.index(var)
+                    value = solution[0][ind]
+
+                # Если значение найдено, форматируем число и заменяем в шаблоне
+                if value is not None:
+                    if isinstance(value, tuple):
+                        value = value[0]
+                    # Убираем незначащие нули, приводим к числу float
+                    value_str = f"{float(value):.6f}".rstrip('0').rstrip('.')
+                    task = task.replace(f'{{{var}}}', value_str)
+
+            # Также заменяем переменные, которые находятся в self.unknowns
+            for var in self.uncnowns:
+                if isinstance(solution, dict):
+                    value = solution.get(var, None)
+                else:
+                    ind = self.variables.index(var)
+                    value = solution[0][ind]
+
+                if value is not None:
+                    if isinstance(value, tuple):
+                        value = value[0]
+                    # Убираем незначащие нули, приводим к числу float
+                    value_str = f"{float(value):.6f}".rstrip('0').rstrip('.')
+                    task = task.replace(f'{{{var}}}', value_str)
+
+            tasks.append(task)
+
+        # Формируем текст задач и выводим
+        tasks_text = "\n\n".join(tasks)
+        self.output_text.delete("1.0", tk.END)
+        self.output_text.insert(tk.END, tasks_text)
+
+    def save_tasks(self):
+        filename = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt")])
+        if filename:
+            with open(filename, 'w') as f:
+                f.write(self.output_text.get("1.0", tk.END))
 
 
 class VariableInputWindow:
@@ -127,7 +190,6 @@ class VariableInputWindow:
                     messagebox.showerror("Ошибка", f"Некорректное значение для переменной {var}.")
                     return
 
-            # Получаем диапазон для неизвестных переменных
             range_value = self.ranges_entries[var].get().strip()
             if range_value:
                 try:
@@ -191,7 +253,7 @@ class SolutionWindow:
         for key in self.known_values.keys():
             self.equations.append(Eq(key, self.known_values[key]))
 
-        # Передаем диапазоны в функцию генерации решений
+        # Генерация решений
         self.solutions = EquationSolver.generation_solutions(self.equations, self.variables,
                                                              count, self.all_unknown_vars, self.ranges)
 
@@ -205,25 +267,27 @@ class SolutionWindow:
                 elif isinstance(solution, dict) and var in solution:
                     value = solution[var]
                     if isinstance(value, (list, tuple)):
-                        # Распаковываем элементы списка
-                        row_values.extend([float(str(v).rstrip('0').rstrip('.')) for v in value])
+                        # Если несколько значений для одной переменной, выводим как кортеж
+                        value_str = f"({', '.join([f'{float(v):.4f}' for v in value])})"
+                        row_values.append(value_str)
                     else:
-                        row_values.append(float(str(value).rstrip('0').rstrip('.')))
+                        row_values.append(f"{float(value):.4f}")
                 elif isinstance(solution, list):
                     ind = self.variables.index(var)
-                    # Получаем значения из списка, распаковывая их
-                    elem = [float(str(j[ind]).rstrip('0').rstrip('.')) for j in solution]
-                    row_values.extend(elem)  # Распаковка в строку таблицы
+                    # Если это список решений для каждой переменной
+                    value_str = f"({', '.join([f'{float(sol[ind]):.4f}' for sol in solution])})"
+                    row_values.append(value_str)
                 else:
                     row_values.append('-')
             table.append(row_values)
 
+        # Форматирование результатов в виде таблицы
         result_text = tabulate(table, headers=header, tablefmt="grid", numalign="center", floatfmt=".4f")
         print(result_text)
         self.solutions_text.set(result_text)
 
     def open_task_window(self):
-        TaskWindow(self.all_unknown_vars, self.solutions, self.unknown_vars)
+        TaskWindow(self.all_unknown_vars, self.solutions, self.unknown_vars, self.variables)
 
     def save_solutions(self):
         filename = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt")])
@@ -234,75 +298,3 @@ class SolutionWindow:
     def next_task(self):
         self.master.destroy()
         EquationInputWindow(tk.Tk())
-
-
-class TaskWindow:
-    def __init__(self, all_unknown_vars, solutions, _uncnowns):
-        self.all_unknown_vars = all_unknown_vars
-        self.solutions = solutions
-        self.uncnowns = _uncnowns
-        self.master = tk.Tk()
-        self.master.title("Генерация заданий")
-
-        # Заголовок с доступными переменными
-        var_label = tk.Label(self.master,
-                             text="Доступные переменные: " + ", ".join(str(var) for var in self.all_unknown_vars)
-                                  + '\nОтветы: ' + ", ".join(str(var) for var in self.uncnowns))
-        var_label.pack()
-
-        # Многострочное поле для ввода задачи
-        tk.Label(self.master, text="Введите текст задачи с переменными в формате {переменная}:").pack()
-        self.task_input = tk.Text(self.master, height=5, width=50)
-        self.task_input.pack(pady=10)
-
-        generate_button = tk.Button(self.master, text="Генерация заданий", command=self.generate_tasks)
-        generate_button.pack()
-
-        self.output_frame = tk.Frame(self.master)
-        self.output_frame.pack(pady=10)
-
-        self.output_text = tk.Text(self.output_frame, height=10, width=50)
-        self.output_text.pack(side=tk.LEFT)
-
-        save_button = tk.Button(self.master, text="Сохранить задания", command=self.save_tasks)
-        save_button.pack(pady=5)
-
-        scroll_bar = tk.Scrollbar(self.output_frame)
-        scroll_bar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.output_text.config(yscrollcommand=scroll_bar.set)
-        scroll_bar.config(command=self.output_text.yview)
-
-    def generate_tasks(self):
-        task_template = self.task_input.get("1.0", tk.END).strip()
-        if not task_template:
-            messagebox.showerror("Ошибка", "Введите текст задачи.")
-            return
-
-        tasks = []
-        for solution in self.solutions:
-            task = task_template
-            for var in self.all_unknown_vars:
-                value = solution.get(var, None)
-                if value is not None:
-                    task = task.replace(f'{{{var}}}', str(value).rstrip('0').rstrip('.'))
-            for var in self.uncnowns:
-                value = solution.get(var, None)
-                if value is not None:
-                    task = task.replace(f'{{{var}}}', str(value).rstrip('0').rstrip('.'))
-            tasks.append(task)
-
-        tasks_text = "\n".join(tasks)
-        self.output_text.delete("1.0", tk.END)  # Очищаем текстовое поле перед выводом
-        self.output_text.insert(tk.END, tasks_text)  # Вставляем сгенерированные задания
-
-    def save_tasks(self):
-        filename = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt")])
-        if filename:
-            with open(filename, 'w') as f:
-                f.write(self.output_text.get("1.0", tk.END))
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = EquationInputWindow(root)
-    root.mainloop()
