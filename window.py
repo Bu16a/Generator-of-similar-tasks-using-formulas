@@ -61,7 +61,7 @@ class TaskWindow:
         self.master.title("Генерация заданий")
 
         var_label = tk.Label(self.master,
-                             text="Доступные переменные: " + ", ".join(str(var) for var in self.all_unknown_vars)
+                             text="Сгенерированные переменные переменные: " + ", ".join(str(var) for var in self.all_unknown_vars)
                                   + '\nОтветы: ' + ", ".join(str(var) for var in self.uncnowns))
         var_label.pack()
 
@@ -161,6 +161,7 @@ class VariableInputWindow:
         self.known_vars_entries = {}
         self.unknown_vars_checkbuttons = {}
         self.ranges_entries = {}
+        self.rounding_entries = {}
 
         self.master = tk.Tk()
         self.master.title("Введите переменные")
@@ -187,6 +188,11 @@ class VariableInputWindow:
             range_entry.pack(side=tk.LEFT)
             self.ranges_entries[var] = range_entry
 
+            tk.Label(frame, text="Округление: ").pack(side=tk.LEFT)
+            rounding_entry = tk.Entry(frame, width=10)
+            rounding_entry.pack(side=tk.LEFT)
+            self.rounding_entries[var] = rounding_entry
+
         submit_button = tk.Button(self.master, text="Далее", command=self.submit_variables)
         submit_button.pack()
 
@@ -194,6 +200,7 @@ class VariableInputWindow:
         known_values = {}
         unknown_vars = []
         ranges = {}
+        rounding = {}
 
         for var in self.variables:
             value = self.known_vars_entries[var].get().strip()
@@ -214,21 +221,35 @@ class VariableInputWindow:
                                          f"Некорректный диапазон для переменной {var}. Используйте формат 'min,max'.")
                     return
 
+            rounding_value = self.rounding_entries[var].get().strip()
+            if rounding_value:
+                try:
+                    print(rounding_value)
+                    count = int(rounding_value)
+                    if count < 0:
+                        raise ValueError("Отрицательное значение")
+                    rounding[var] = count
+                except ValueError:
+                    messagebox.showerror("Ошибка",
+                                         f"Некорректный ввод, введите целое число")
+                    return
+
         for var in self.variables:
             if self.unknown_vars_checkbuttons[var].get() == 1:
                 unknown_vars.append(var)
 
         self.master.destroy()
-        SolutionWindow(self.equations, self.variables, known_values, unknown_vars, ranges)
+        SolutionWindow(self.equations, self.variables, known_values, unknown_vars, ranges, rounding)
 
 
 class SolutionWindow:
-    def __init__(self, equations, variables, known_values, unknown_vars, ranges):
+    def __init__(self, equations, variables, known_values, unknown_vars, ranges, rounding):
         self.equations = equations
         self.variables = variables
         self.known_values = known_values
         self.unknown_vars = unknown_vars
         self.ranges = ranges
+        self.rounding = rounding
         self.solutions = None
         self.master = tk.Tk()
         self.master.title("Решения уравнений")
@@ -282,7 +303,7 @@ class SolutionWindow:
 
         # Генерация решений
         self.solutions = EquationSolver.generation_solutions(
-            self.equations, self.variables, count, self.all_unknown_vars, self.ranges
+            self.equations, self.variables, count, self.all_unknown_vars, self.ranges, self.rounding
         )
 
         header = [str(var) for var in self.variables]

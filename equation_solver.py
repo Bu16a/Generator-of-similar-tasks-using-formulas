@@ -21,13 +21,13 @@ class EquationSolver:
         return res if isinstance(res, (list, tuple)) else [res]
 
     @staticmethod
-    def generation_solutions(equations, find_vars, count, all_unknown_vars, ranges):
+    def generation_solutions(equations, find_vars, count, all_unknown_vars, ranges, rounding):
         results = []
         for i in range(count):
             eq_copy = equations.copy()
             for var in all_unknown_vars:
                 var_range = ranges.get(var, (1, 100))
-                random_value = round(random.uniform(*var_range), 2)
+                random_value = round(random.uniform(*var_range), rounding.get(var, 2))
                 eq_copy.append(Eq(var, random_value))
             solutions = solve(eq_copy, find_vars)
             results.append(solutions)
