@@ -9,7 +9,11 @@ class EquationInputWindow:
     def __init__(self, master):
         self.master = master
         self.master.title("Ввод уравнений")
-        self.eq_text = tk.Text(self.master, height=10, width=50)
+        self.eq_text = tk.Text(self.master, height=10, width=50, wrap="none")
+
+        h_scroll = tk.Scrollbar(self.master, orient="horizontal", command=self.eq_text.xview)
+        self.eq_text.config(xscrollcommand=h_scroll.set)
+        h_scroll.pack(fill=tk.X)
 
         tk.Label(self.master, text="Введите уравнения в формате ... = ... :").pack()
         self.eq_text.pack()
@@ -62,7 +66,12 @@ class TaskWindow:
         var_label.pack()
 
         tk.Label(self.master, text="Введите текст задачи с переменными в формате {переменная}:").pack()
-        self.task_input = tk.Text(self.master, height=5, width=50)
+        self.task_input = tk.Text(self.master, height=5, width=50, wrap="none")
+
+        task_h_scroll = tk.Scrollbar(self.master, orient="horizontal", command=self.task_input.xview)
+        self.task_input.config(xscrollcommand=task_h_scroll.set)
+        task_h_scroll.pack(fill=tk.X)
+
         self.task_input.pack(pady=10)
 
         generate_button = tk.Button(self.master, text="Генерация заданий", command=self.generate_tasks)
@@ -71,7 +80,12 @@ class TaskWindow:
         self.output_frame = tk.Frame(self.master)
         self.output_frame.pack(pady=10)
 
-        self.output_text = tk.Text(self.output_frame, height=10, width=50)
+        self.output_text = tk.Text(self.output_frame, height=10, width=50, wrap="none")
+
+        scroll_bar_x = tk.Scrollbar(self.master, orient="horizontal", command=self.output_text.xview)
+        self.output_text.config(xscrollcommand=scroll_bar_x.set)
+        scroll_bar_x.pack(fill=tk.X)
+
         self.output_text.pack(side=tk.LEFT)
 
         save_button = tk.Button(self.master, text="Сохранить задания", command=self.save_tasks)
@@ -215,11 +229,9 @@ class SolutionWindow:
         self.known_values = known_values
         self.unknown_vars = unknown_vars
         self.ranges = ranges
-
+        self.solutions = None
         self.master = tk.Tk()
         self.master.title("Решения уравнений")
-
-        self.solutions_text = tk.StringVar()
 
         tk.Label(self.master, text="Введите количество заданий:").pack()
         self.count_entry = tk.Entry(self.master)
@@ -228,7 +240,22 @@ class SolutionWindow:
         self.table_frame = tk.Frame(self.master)
         self.table_frame.pack()
 
-        tk.Label(self.master, textvariable=self.solutions_text, justify="left", font=("Courier", 10)).pack()
+        # Создаем текстовое окно с прокруткой для вывода решений
+        self.solution_frame = tk.Frame(self.master)
+        self.solution_frame.pack()
+
+        self.scrollbar_y = tk.Scrollbar(self.solution_frame)
+        self.scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.scrollbar_x = tk.Scrollbar(self.solution_frame, orient=tk.HORIZONTAL)
+        self.scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.solution_text = tk.Text(self.solution_frame, wrap="none", height=20, width=80,
+                                     xscrollcommand=self.scrollbar_x.set, yscrollcommand=self.scrollbar_y.set)
+        self.solution_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.scrollbar_x.config(command=self.solution_text.xview)
+        self.scrollbar_y.config(command=self.solution_text.yview)
 
         generate_button = tk.Button(self.master, text="Сгенерировать решения", command=self.generate_solutions)
         generate_button.pack()
@@ -254,8 +281,9 @@ class SolutionWindow:
             self.equations.append(Eq(key, self.known_values[key]))
 
         # Генерация решений
-        self.solutions = EquationSolver.generation_solutions(self.equations, self.variables,
-                                                             count, self.all_unknown_vars, self.ranges)
+        self.solutions = EquationSolver.generation_solutions(
+            self.equations, self.variables, count, self.all_unknown_vars, self.ranges
+        )
 
         header = [str(var) for var in self.variables]
         table = []
@@ -267,14 +295,12 @@ class SolutionWindow:
                 elif isinstance(solution, dict) and var in solution:
                     value = solution[var]
                     if isinstance(value, (list, tuple)):
-                        # Если несколько значений для одной переменной, выводим как кортеж
                         value_str = f"({', '.join([f'{float(v):.4f}' for v in value])})"
                         row_values.append(value_str)
                     else:
                         row_values.append(f"{float(value):.4f}")
                 elif isinstance(solution, list):
                     ind = self.variables.index(var)
-                    # Если это список решений для каждой переменной
                     value_str = f"({', '.join([f'{float(sol[ind]):.4f}' for sol in solution])})"
                     row_values.append(value_str)
                 else:
@@ -283,8 +309,10 @@ class SolutionWindow:
 
         # Форматирование результатов в виде таблицы
         result_text = tabulate(table, headers=header, tablefmt="grid", numalign="center", floatfmt=".4f")
-        print(result_text)
-        self.solutions_text.set(result_text)
+
+        # Очистка и вывод текста решений в текстовое окно
+        self.solution_text.delete(1.0, tk.END)  # Очищаем текстовое поле
+        self.solution_text.insert(tk.END, result_text)  # Выводим новое решение
 
     def open_task_window(self):
         TaskWindow(self.all_unknown_vars, self.solutions, self.unknown_vars, self.variables)
@@ -293,7 +321,7 @@ class SolutionWindow:
         filename = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt")])
         if filename:
             with open(filename, 'w') as f:
-                f.write(self.solutions_text.get())
+                f.write(self.solution_text.get("1.0", tk.END))
 
     def next_task(self):
         self.master.destroy()

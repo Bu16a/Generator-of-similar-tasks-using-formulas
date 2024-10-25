@@ -7,15 +7,18 @@ class EquationSolver:
     @staticmethod
     def parse_equation(equation):
         equation = re.sub(r'\^', '**', equation)
-        equation = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', equation)
-        equation = re.sub(r'([a-zA-Z])([a-zA-Z])', r'\1*\2', equation)
+        equation = re.sub(r'(\d)([a-zA-Z])', r'\1 * \2', equation)
         return equation
 
     @staticmethod
     def find_variables(equation):
-        variables = set(re.findall(r'[a-zA-Z]', equation))
+        variables = set(re.findall(r'[a-zA-Z]+', equation))
+
+        math_functions = {'sin', 'cos', 'log', 'tan', 'exp', 'sqrt'}
+        variables -= math_functions
+
         res = symbols(' '.join(variables))
-        return res if isinstance(res, list) or isinstance(res, tuple) else [res]
+        return res if isinstance(res, (list, tuple)) else [res]
 
     @staticmethod
     def generation_solutions(equations, find_vars, count, all_unknown_vars, ranges):
