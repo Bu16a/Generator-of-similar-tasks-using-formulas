@@ -108,25 +108,7 @@ class TaskWindow:
         # Итерируем по всем решениям
         for solution in self.solutions:
             task = task_template
-            for var in self.all_unknown_vars:
-                # Если решение - словарь
-                if isinstance(solution, dict):
-                    value = solution.get(var, None)
-                # Если решение - список
-                else:
-                    ind = self.variables.index(var)
-                    value = solution[0][ind]
-
-                # Если значение найдено, форматируем число и заменяем в шаблоне
-                if value is not None:
-                    if isinstance(value, tuple):
-                        value = value[0]
-                    # Убираем незначащие нули, приводим к числу float
-                    value_str = f"{float(value):.6f}".rstrip('0').rstrip('.')
-                    task = task.replace(f'{{{var}}}', value_str)
-
-            # Также заменяем переменные, которые находятся в self.unknowns
-            for var in self.uncnowns:
+            for var in self.all_unknown_vars + self.uncnowns:
                 if isinstance(solution, dict):
                     value = solution.get(var, None)
                 else:
@@ -135,9 +117,15 @@ class TaskWindow:
 
                 if value is not None:
                     if isinstance(value, tuple):
-                        value = value[0]
-                    # Убираем незначащие нули, приводим к числу float
-                    value_str = f"{float(value):.6f}".rstrip('0').rstrip('.')
+                        value = max(value)
+                    if isinstance(value, complex):
+                        value_str = f"({value.real:.4f} + {value.imag:.4f}j)"
+                    elif isinstance(value, (int, float)):
+                        value_str = f"{float(value):.6f}".rstrip('0').rstrip('.')
+                    elif isinstance(value, str):
+                        value_str = value
+                    else:
+                        value_str = '-'
                     task = task.replace(f'{{{var}}}', value_str)
 
             tasks.append(task)
@@ -315,17 +303,24 @@ class SolutionWindow:
                     row_values.append(self.known_values[var])
                 elif isinstance(solution, dict) and var in solution:
                     value = solution[var]
-                    if isinstance(value, (list, tuple)):
+
+                    # Проверка на комплексное число
+                    if isinstance(value, complex):
+                        value_str = f"({value.real:.4f} + {value.imag:.4f}j)"
+                        row_values.append(value_str)
+                    elif isinstance(value, (list, tuple)):
                         value_str = f"({', '.join([f'{float(v):.4f}' for v in value])})"
                         row_values.append(value_str)
                     else:
                         row_values.append(f"{float(value):.4f}")
+
                 elif isinstance(solution, list):
                     ind = self.variables.index(var)
                     value_str = f"({', '.join([f'{float(sol[ind]):.4f}' for sol in solution])})"
                     row_values.append(value_str)
                 else:
                     row_values.append('-')
+
             table.append(row_values)
 
         # Форматирование результатов в виде таблицы
