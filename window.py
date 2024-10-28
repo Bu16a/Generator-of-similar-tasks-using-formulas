@@ -2,7 +2,8 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 from tabulate import tabulate
 from equation_solver import EquationSolver
-from sympy import Eq, sympify
+from sympy import Eq, sympify, Float
+from sympy import re, im
 
 
 class EquationInputWindow:
@@ -48,7 +49,7 @@ class EquationInputWindow:
 
         variables = EquationSolver.find_variables("\n".join(eq_input))
         self.master.destroy()
-        VariableInputWindow(equations, variables)
+        VariableInputWindow(equations, variables, eq_input)
 
 
 class TaskWindow:
@@ -118,14 +119,10 @@ class TaskWindow:
                 if value is not None:
                     if isinstance(value, tuple):
                         value = max(value)
-                    if isinstance(value, complex):
-                        value_str = f"({value.real:.4f} + {value.imag:.4f}j)"
-                    elif isinstance(value, (int, float)):
-                        value_str = f"{float(value):.6f}".rstrip('0').rstrip('.')
-                    elif isinstance(value, str):
-                        value_str = value
+                    if value.is_imaginary:
+                        value_str = f"({re(value):.4f} + {im(value):.4f}j)"
                     else:
-                        value_str = '-'
+                        value_str = f"{float(value):.6f}".rstrip('0').rstrip('.')
                     task = task.replace(f'{{{var}}}', value_str)
 
             tasks.append(task)
@@ -143,8 +140,9 @@ class TaskWindow:
 
 
 class VariableInputWindow:
-    def __init__(self, equations, variables):
+    def __init__(self, equations, variables, _eqinput):
         self.equations = equations
+        self.eqinput = _eqinput
         self.variables = variables
         self.known_vars_entries = {}
         self.unknown_vars_checkbuttons = {}
@@ -155,6 +153,7 @@ class VariableInputWindow:
         self.master.title("Введите переменные")
 
         tk.Label(self.master, text="Введите значения известных переменных и отметьте неизвестные:").pack()
+        tk.Label(self.master, text='\n'.join(list(map(str, self.eqinput)))).pack()
 
         for var in variables:
             frame = tk.Frame(self.master)
@@ -212,7 +211,6 @@ class VariableInputWindow:
             rounding_value = self.rounding_entries[var].get().strip()
             if rounding_value:
                 try:
-                    print(rounding_value)
                     count = int(rounding_value)
                     if count < 0:
                         raise ValueError("Отрицательное значение")
@@ -303,17 +301,16 @@ class SolutionWindow:
                     row_values.append(self.known_values[var])
                 elif isinstance(solution, dict) and var in solution:
                     value = solution[var]
-
-                    # Проверка на комплексное число
-                    if isinstance(value, complex):
-                        value_str = f"({value.real:.4f} + {value.imag:.4f}j)"
+                    if value.is_imaginary:
+                        value_str = f"({re(value):.4f} + {im(value):.4f}j)"
                         row_values.append(value_str)
                     elif isinstance(value, (list, tuple)):
                         value_str = f"({', '.join([f'{float(v):.4f}' for v in value])})"
                         row_values.append(value_str)
-                    else:
+                    elif isinstance(value, Float):
                         row_values.append(f"{float(value):.4f}")
-
+                    else:
+                        row_values.append('-')
                 elif isinstance(solution, list):
                     ind = self.variables.index(var)
                     value_str = f"({', '.join([f'{float(sol[ind]):.4f}' for sol in solution])})"
