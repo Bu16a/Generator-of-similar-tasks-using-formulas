@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 from tabulate import tabulate
 from equation_solver import EquationSolver
-from sympy import Eq, sympify, Float
+from sympy import Eq, sympify, Float, Integer
 from sympy import re, im
 
 
@@ -279,56 +279,93 @@ class SolutionWindow:
         self.all_unknown_vars = []
 
     def generate_solutions(self):
-        count = int(self.count_entry.get())
+        try:
+            count = int(self.count_entry.get())
+        except ValueError:
+            messagebox.showerror("Ошибка", "Некорректный ввод, укажите целое целое число заданий")
+            return
+
         all_unknown_vars = [var for var in self.variables if var not in self.known_values]
         find_vars = [var for var in self.unknown_vars if var not in self.known_values]
         self.all_unknown_vars = [var for var in all_unknown_vars if var not in find_vars]
 
-        for key in self.known_values.keys():
-            self.equations.append(Eq(key, self.known_values[key]))
+        # Добавляем известные значения в уравнения
+        for key, value in self.known_values.items():
+            self.equations.append(Eq(key, value))
 
         # Генерация решений
         self.solutions = EquationSolver.generation_solutions(
             self.equations, self.variables, count, self.all_unknown_vars, self.ranges, self.rounding
         )
 
-        header = [str(var) for var in self.variables]
+        sorted_variables = sorted(self.variables, key=lambda var: str(var))
+
+        # Формируем заголовок таблицы
+        header = [str(var) for var in sorted_variables]
         table = []
+
+        # Обрабатываем каждое решение
         for solution in self.solutions:
             row_values = []
-            for var in self.variables:
+            for var in sorted_variables:
                 if var in self.known_values:
+                    # Если переменная известна, добавляем её значение
                     row_values.append(self.known_values[var])
                 elif isinstance(solution, dict) and var in solution:
+                    # Если переменная в решении (словарь)
                     value = solution[var]
-                    if value.is_imaginary:
-                        value_str = f"({re(value):.4f} + {im(value):.4f}j)"
-                        row_values.append(value_str)
-                    elif isinstance(value, (list, tuple)):
-                        value_str = f"({', '.join([f'{float(v):.4f}' for v in value])})"
-                        row_values.append(value_str)
-                    elif isinstance(value, Float):
-                        row_values.append(f"{float(value):.4f}")
-                    else:
-                        row_values.append('-')
-                elif isinstance(solution, list):
+                    row_values.append(self._format_value(value))
+                elif isinstance(solution, (list, tuple)):
+                    # Если решение — список или кортеж
                     ind = self.variables.index(var)
-                    value_str = f"({', '.join([f'{float(sol[ind]):.4f}' for sol in solution])})"
-                    row_values.append(value_str)
+                    value = solution[ind]
+                    row_values.append(self._format_value(value))
                 else:
+                    # Если значение отсутствует
                     row_values.append('-')
-
             table.append(row_values)
 
-        # Форматирование результатов в виде таблицы
-        result_text = tabulate(table, headers=header, tablefmt="grid", numalign="center", floatfmt=".4f")
+        # Выводим таблицу
+        self._display_table(header, table)
 
-        # Очистка и вывод текста решений в текстовое окно
+    def _format_value(self, value):
+        if isinstance(value, (Float, Integer)):
+            # Для sympy Float и Integer
+            if value == int(value):  # Если значение целое
+                return f"{int(value)}"
+            return f"{float(value):.4f}".rstrip('0').rstrip('.')
+        elif isinstance(value, (int, float)):
+            # Для стандартных Python int и float
+            if value == int(value):  # Если значение целое
+                return f"{int(value)}"
+            return f"{value:.4f}".rstrip('0').rstrip('.')
+        elif isinstance(value, complex):
+            # Для комплексных чисел
+            return f"({value.real:.4f} + {value.imag:.4f}j)"
+        elif isinstance(value, (list, tuple)):
+            # Для списков и кортежей
+            return f"({', '.join([self._format_value(v) for v in value])})"
+        elif hasattr(value, 'is_imaginary') and value.is_imaginary:
+            # Для sympy комплексных чисел
+            return str(value)
+        else:
+            # Для остальных случаев
+            return str(value)
+
+    def _display_table(self, header, table):
+        """
+        Отображает таблицу с решениями.
+        """
+        from tabulate import tabulate
+        result_text = tabulate(table, headers=header, tablefmt="grid", numalign="center", floatfmt=".4f")
         self.solution_text.delete(1.0, tk.END)  # Очищаем текстовое поле
         self.solution_text.insert(tk.END, result_text)  # Выводим новое решение
 
     def open_task_window(self):
-        TaskWindow(self.all_unknown_vars, self.solutions, self.unknown_vars, self.variables)
+        if self.solutions:
+            TaskWindow(self.all_unknown_vars, self.solutions, self.unknown_vars, self.variables)
+        else:
+            messagebox.showerror("Ошибка", "Сначала сгенерируйте решения.")
 
     def save_solutions(self):
         filename = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt")])
