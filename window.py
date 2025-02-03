@@ -23,6 +23,7 @@ class EquationInputWindow:
         submit_button.pack()
 
     def submit_equations(self):
+        import re
         eq_input = self.eq_text.get("1.0", tk.END).strip().splitlines()
         equations = []
 
@@ -30,6 +31,10 @@ class EquationInputWindow:
             if equation:
                 if equation.count('=') != 1:
                     messagebox.showerror("Ошибка", "Должно быть одно и только одно '='.")
+                    return
+                valid_pattern = re.compile(r'^[a-zA-Z0-9\s\+\-\*\/\^=()]+$')
+                if not bool(valid_pattern.match(equation)):
+                    messagebox.showerror("Ошибка", f"Ошибка при парсинге уравнения: присутствует недопустимый символ")
                     return
                 left_side, right_side = equation.split('=')
                 left_parsed = EquationSolver.parse_equation(left_side.strip())
@@ -62,7 +67,8 @@ class TaskWindow:
         self.master.title("Генерация заданий")
 
         var_label = tk.Label(self.master,
-                             text="Сгенерированные переменные переменные: " + ", ".join(str(var) for var in self.all_unknown_vars)
+                             text="Сгенерированные переменные переменные: " + ", ".join(
+                                 str(var) for var in self.all_unknown_vars)
                                   + '\nОтветы: ' + ", ".join(str(var) for var in self.uncnowns))
         var_label.pack()
 
@@ -305,6 +311,10 @@ class SolutionWindow:
         table = []
 
         # Обрабатываем каждое решение
+        if len(self.solutions) == self.solutions.count([]):
+            self.solution_text.delete(1.0, tk.END)
+            self.solution_text.insert(tk.END, 'Нет решений.')
+            return
         for solution in self.solutions:
             row_values = []
             for var in sorted_variables:
@@ -353,9 +363,6 @@ class SolutionWindow:
             return str(value)
 
     def _display_table(self, header, table):
-        """
-        Отображает таблицу с решениями.
-        """
         from tabulate import tabulate
         result_text = tabulate(table, headers=header, tablefmt="grid", numalign="center", floatfmt=".4f")
         self.solution_text.delete(1.0, tk.END)  # Очищаем текстовое поле
@@ -363,7 +370,10 @@ class SolutionWindow:
 
     def open_task_window(self):
         if self.solutions:
-            TaskWindow(self.all_unknown_vars, self.solutions, self.unknown_vars, self.variables)
+            if len(self.solutions) == self.solutions.count([]):
+                messagebox.showerror("Ошибка", "Решений нет.")
+            else:
+                TaskWindow(self.all_unknown_vars, self.solutions, self.unknown_vars, self.variables)
         else:
             messagebox.showerror("Ошибка", "Сначала сгенерируйте решения.")
 
